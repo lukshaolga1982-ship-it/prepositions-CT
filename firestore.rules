@@ -26,5 +26,17 @@ service cloud.firestore {
         allow read, write: if isTeacher() || (signedIn() && request.auth.uid == studentId);
       }
     }
+
+    match /feedback/{messageId} {
+      allow create: if signedIn()
+                    && request.resource.data.studentId == request.auth.uid;
+      allow read: if isTeacher()
+                  || (signedIn() && resource.data.studentId == request.auth.uid);
+      allow update, delete: if isTeacher();
+    }
+
+    match /studentAccess/{studentId} {
+      allow read, create, update, delete: if isTeacher();
+    }
   }
 }

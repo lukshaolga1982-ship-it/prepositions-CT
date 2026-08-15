@@ -38,5 +38,10 @@ service cloud.firestore {
     match /studentAccess/{studentId} {
       allow read, create, update, delete: if isTeacher();
     }
+
+    match /customExpressions/{expressionId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isTeacher();
+    }
   }
 }

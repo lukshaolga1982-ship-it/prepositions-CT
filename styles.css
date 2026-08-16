@@ -61,6 +61,10 @@ body{background:radial-gradient(circle at 10% 4%,#dcebd6 0,transparent 34%),radi
 @media(max-width:980px){.journey-hero>img.hero-branch{left:calc(5% - 50px)}.journey-hero>.teacher-progress{top:20px;right:24px;left:auto;width:284px;height:284px;padding:20px}.journey-hero>.teacher-progress strong{font-size:52px}.journey-hero>.teacher-progress span{font-size:15px}}
 @media(max-width:620px){.journey-hero>.teacher-progress{top:16px;right:16px;left:auto;width:192px;height:192px;padding:16px}.journey-hero>.teacher-progress strong{font-size:38px}.journey-hero>.teacher-progress span{font-size:12px}}
 
+/* Larger teacher portrait and lower motivational note */
+@media(min-width:981px){.journey-hero{min-height:590px}.teacher-note{padding-right:18px}.teacher-note>.teacher-portrait{flex:0 0 430px;transform:translateY(108px)}.teacher-note>.teacher-portrait>img{width:430px;max-height:560px}.teacher-note>.teacher-message{width:310px;margin:0 0 28px -92px}}
+@media(min-width:621px) and (max-width:980px){.journey-hero{min-height:780px}.teacher-note>.teacher-portrait{flex-basis:360px;transform:translateY(92px)}.teacher-note>.teacher-portrait>img{width:360px;max-height:475px}.teacher-note>.teacher-message{margin-bottom:24px}}
+
 /* Teacher view: checkpoint mistake history */
 .checkpoint-mistakes-panel{margin-top:18px;padding:clamp(22px,3vw,32px)}.checkpoint-mistakes-panel h3{margin:7px 0 5px;font:700 22px Unbounded}.panel-intro{margin:0 0 20px;color:var(--muted)}.teacher-attempt-list{display:grid;gap:14px}.teacher-attempt{padding:18px;border:1px solid var(--line);border-radius:18px;background:#fff}.teacher-attempt-head{display:flex;align-items:center;justify-content:space-between;gap:16px}.teacher-attempt-head>div{display:grid;gap:4px}.teacher-attempt-head small{color:var(--muted)}.teacher-attempt-head>strong{font:700 24px Unbounded}.teacher-attempt-head>strong.passed{color:#5f9365}.teacher-attempt-head>strong.failed{color:#bd7067}.teacher-attempt ol{display:grid;gap:9px;margin:16px 0 0;padding-left:26px}.teacher-attempt li{padding:13px 15px;border:1px solid #edd8d2;border-radius:13px;background:#fff9f6}.teacher-attempt li p{margin:0 0 8px;font:600 15px/1.5 Georgia,'Times New Roman',serif}.teacher-attempt li div{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:12px}.teacher-attempt li span:first-child b{color:#ad5f57}.teacher-attempt li span:last-child b{color:#4f8057}.teacher-attempt .perfect-attempt{margin:14px 0 0;padding:12px;border-radius:12px}
 @media(max-width:620px){.teacher-attempt-head{align-items:flex-start}.teacher-attempt-head>strong{font-size:20px}}
@@ -89,9 +93,9 @@ body{background:radial-gradient(circle at 10% 4%,#dcebd6 0,transparent 34%),radi
 @media(max-width:620px){.journey-hero:after{display:none}}
 
 /* Final hero decoration positions — keep this block last */
-.journey-hero>img.hero-branch{left:calc(49% - 309px)!important}
+.journey-hero>img.hero-branch{left:calc(49% - 271px)!important}
 .journey-hero>.teacher-progress{position:absolute;top:20px;right:24px;left:auto;width:328px;height:328px;padding:24px;transform:none}
 .journey-hero>.teacher-progress strong{font-size:62px}.journey-hero>.teacher-progress span{font-size:18px}
-@media(max-width:1100px){.journey-hero>img.hero-branch{left:calc(44% - 285px)!important}}
+@media(max-width:1100px){.journey-hero>img.hero-branch{left:calc(44% - 247px)!important}}
 @media(max-width:980px){.journey-hero>img.hero-branch{left:calc(5% - 50px)!important}.journey-hero>.teacher-progress{top:20px;right:24px;left:auto;width:284px;height:284px;padding:20px}.journey-hero>.teacher-progress strong{font-size:52px}.journey-hero>.teacher-progress span{font-size:15px}}
 @media(max-width:620px){.journey-hero>.teacher-progress{top:16px;right:16px;left:auto;width:192px;height:192px;padding:16px}.journey-hero>.teacher-progress strong{font-size:38px}.journey-hero>.teacher-progress span{font-size:12px}}

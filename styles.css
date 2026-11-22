@@ -391,3 +391,7 @@ body {
 
 .flashcard-input-tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0 4px}.flashcard-input-tools .small-btn{min-height:42px;border-radius:12px;background:#e5eee0;color:#355a3e;border:1px solid #c9d9c4;font-weight:800}.flashcard-input-tools small{color:#627769;line-height:1.5}.flashcard-editor #flashPairs{white-space:pre-wrap;tab-size:4}
 @media(max-width:620px){.flashcard-input-tools .small-btn{width:100%}}
+
+.flashcard-preview-note{display:inline-block;max-width:100%;margin:10px auto 14px;padding:9px 15px;border-radius:999px;background:#e5efe0;border:1px solid #cddfc5;color:#426a49;font-size:12px;font-weight:800;line-height:1.5}
+.flashcard-set-tile .hero-actions{display:flex;flex-wrap:wrap;gap:8px}.flashcard-set-tile .hero-actions .btn,.flashcard-set-tile .hero-actions .small-btn{min-height:41px}
+@media(max-width:620px){.flashcard-preview-note{border-radius:14px}.flashcard-set-tile .hero-actions .btn{flex:1 1 130px}.flashcard-set-tile .hero-actions .small-btn{flex:1 1 100%}}

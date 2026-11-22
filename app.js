@@ -159,6 +159,8 @@ async function teacherEmbeddedActivities(){
     const items=snap.docs.map(d=>({id:d.id,...d.data()}));
     $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К ученикам</button><section class="flashcard-intro"><div class="eyebrow">INTERACTIVE LIBRARY · O! ENGLISH</div><h2>Игры и <i>тренажёры</i></h2><p>Добавляйте упражнения Wordwall и Quizlet, не выходя из стиля нашего сайта.</p><button class="btn" id="newEmbed">+ Добавить упражнение</button></section><div class="flashcard-set-grid">${items.map((s,i)=>`<article class="panel flashcard-set-tile"><span class="flashcard-set-index">${String(i+1).padStart(2,'0')}</span><span class="eyebrow">${esc(s.provider)}</span><h3>${esc(s.title)}</h3><p>Назначено ученикам: ${(s.assignedTo||[]).length}</p><div class="hero-actions"><button class="btn secondary" data-embed-edit="${s.id}">Изменить</button><button class="small-btn" data-embed-delete="${s.id}">Удалить</button></div></article>`).join('')||'<section class="panel flashcard-empty"><h3>Здесь появятся ваши игры ✦</h3><p>Скопируйте код встраивания из Wordwall или Quizlet и назначьте упражнение ученикам.</p></section>'}</div></div>`;
     $('#back').onclick=teacherDashboardV2;$('#newEmbed').onclick=()=>editEmbeddedActivity();
+    document.querySelectorAll('[data-embed-edit]').forEach(b=>{const id=b.dataset.embedEdit;b.insertAdjacentHTML('beforebegin',`<button class="btn" data-embed-preview="${id}">Просмотреть</button>`)});
+    document.querySelectorAll('[data-embed-preview]').forEach(b=>b.onclick=()=>showEmbeddedActivity(items.find(s=>s.id===b.dataset.embedPreview),true));
     document.querySelectorAll('[data-embed-edit]').forEach(b=>b.onclick=()=>editEmbeddedActivity(items.find(s=>s.id===b.dataset.embedEdit)));
     document.querySelectorAll('[data-embed-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('Удалить это упражнение из назначений?'))return;try{await deleteDoc(doc(firestore,'externalActivities',b.dataset.embedDelete));teacherEmbeddedActivities()}catch{toast('Не удалось удалить упражнение')}});
   }catch{toast('Не удалось загрузить упражнения. Опубликуйте новые правила Firestore.');teacherDashboardV2()}
@@ -194,12 +196,13 @@ async function studentEmbeddedActivities(){
     document.querySelectorAll('[data-embed-open]').forEach(b=>b.onclick=()=>showEmbeddedActivity(items.find(s=>s.id===b.dataset.embedOpen)));
   }catch{toast('Не удалось загрузить упражнения. Проверьте правила Firestore.');home()}
 }
-function showEmbeddedActivity(item){
-  if(currentRole!=='student'||!item)return;
+function showEmbeddedActivity(item,teacherPreview=false){
+  if(!item||(teacherPreview?currentRole!=='teacher':currentRole!=='student'))return;
   let safe;
   try{safe=parseLearningEmbed(item.embedUrl)}catch{toast('В этом упражнении некорректная ссылка. Сообщите преподавателю.');return}
   $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К списку игр</button><section class="panel flashcard-study embed-study"><div class="eyebrow">${esc(safe.provider)} · ИНТЕРАКТИВНОЕ ЗАДАНИЕ</div><h2>${esc(item.title)}</h2><p class="flashcard-hint">Упражнение загружается со стороннего сервиса. Его результаты могут не отображаться в личном прогрессе сайта.</p><div class="embedded-frame"><iframe src="${esc(safe.embedUrl)}" title="${esc(item.title)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" allowfullscreen></iframe></div><p><a class="embed-outside" href="${esc(safe.embedUrl)}" target="_blank" rel="noopener noreferrer">Открыть упражнение в отдельной вкладке ↗</a></p></section></div>`;
-  $('#back').onclick=studentEmbeddedActivities;
+  $('#back').onclick=teacherPreview?teacherEmbeddedActivities:studentEmbeddedActivities;
+  if(teacherPreview){$('.embed-study .eyebrow').insertAdjacentHTML('afterend','<p class="flashcard-preview-note">Режим просмотра преподавателя · результаты не сохраняются</p>')}
 }
 async function teacherFlashcardSets(){
   if(currentRole!=='teacher')return;
@@ -209,6 +212,8 @@ async function teacherFlashcardSets(){
     $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К ученикам</button><section class="flashcard-intro"><div class="eyebrow">FLASHCARD STUDIO · O! ENGLISH</div><h2>Мои <i>наборы</i></h2><p>Ваши авторские выражения. Красивый способ учить, повторять и запоминать.</p><button class="btn" id="newFlashcardSet">+ Новый набор</button></section><div class="flashcard-set-grid">${sets.map((s,i)=>`<article class="panel flashcard-set-tile"><span class="flashcard-set-index">${String(i+1).padStart(2,'0')}</span><span class="eyebrow">${(s.cards||[]).length} карточек</span><h3>${esc(s.title)}</h3><p>Назначено ученикам: ${(s.assignedTo||[]).length}</p><div class="hero-actions"><button class="btn secondary" data-flash-edit="${s.id}">Изменить</button><button class="small-btn" data-flash-delete="${s.id}">Удалить</button></div></article>`).join('')||'<section class="panel flashcard-empty"><h3>Создайте первый набор ✦</h3><p>Вставьте пары выражений и переводов из таблицы или подготовьте их вручную.</p></section>'}</div></div>`;
     $('#back').onclick=teacherDashboardV2;
     $('#newFlashcardSet').onclick=()=>editFlashcardSet();
+    document.querySelectorAll('[data-flash-edit]').forEach(b=>{const id=b.dataset.flashEdit;b.insertAdjacentHTML('beforebegin',`<button class="btn" data-flash-preview="${id}">Просмотреть</button>`)});
+    document.querySelectorAll('[data-flash-preview]').forEach(b=>b.onclick=()=>studyFlashcardSet(sets.find(s=>s.id===b.dataset.flashPreview),true));
     document.querySelectorAll('[data-flash-edit]').forEach(b=>b.onclick=()=>editFlashcardSet(sets.find(s=>s.id===b.dataset.flashEdit)));
     document.querySelectorAll('[data-flash-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('Удалить этот набор у всех назначенных учеников?'))return;try{await deleteDoc(doc(firestore,'flashcardSets',b.dataset.flashDelete));teacherFlashcardSets()}catch{toast('Не удалось удалить набор')}});
   }catch{toast('Не удалось получить наборы. Опубликуйте новые правила Firestore.');teacherDashboardV2()}
@@ -254,8 +259,8 @@ async function studentFlashcardSets(){
     document.querySelectorAll('[data-flash-open]').forEach(b=>b.onclick=()=>studyFlashcardSet(sets.find(s=>s.id===b.dataset.flashOpen)));
   }catch{toast('Не удалось загрузить наборы. Проверьте правила Firestore.');home()}
 }
-function studyFlashcardSet(set){
-  if(currentRole!=='student'||!set?.cards?.length)return;
+function studyFlashcardSet(set,teacherPreview=false){
+  if((teacherPreview?currentRole!=='teacher':currentRole!=='student')||!set?.cards?.length)return;
   let order=shuffle(set.cards),index=0,flipped=false,reversed=false,onlyDifficult=false;
   const render=()=>{
     const record=(state.flashcardProgress||{})[set.id]||{},difficult=new Set(record.difficult||[]);
@@ -263,16 +268,15 @@ function studyFlashcardSet(set){
     if(index>=cards.length)index=0;
     const item=cards[index];
     $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К наборам</button><section class="panel flashcard-study"><div class="eyebrow">${esc(set.title)}</div><div class="flashcard-study-head"><h2>Учим выражения</h2><span>${cards.length?`${index+1} / ${cards.length}`:'0 / 0'}</span></div><div class="flashcard-toolbar"><button class="small-btn" id="flashShuffle">Перемешать</button><button class="small-btn" id="flashReverse">${reversed?'Русский → английский':'Английский → русский'} ⇄</button><button class="small-btn ${onlyDifficult?'active':''}" id="flashOnlyDifficult">${onlyDifficult?'Все карточки':'Только трудные · '+difficult.size}</button></div>${item?`<button class="flip-scene" id="flipCard" aria-label="Перевернуть карточку" aria-pressed="${flipped}"><span class="flip-card ${flipped?'flipped':''}"><span class="flip-face flip-front"><small>${reversed?'ПЕРЕВЕДИ НА АНГЛИЙСКИЙ':'ВСПОМНИ ПЕРЕВОД'}</small><strong>${esc(reversed?item.back:item.front)}</strong><em>Нажми, чтобы перевернуть ↻</em></span><span class="flip-face flip-back"><small>ОБРАТНАЯ СТОРОНА</small><strong>${esc(reversed?item.front:item.back)}</strong><em>Нажми, чтобы вернуться ↻</em></span></span></button><div class="flashcard-study-actions"><button class="btn secondary" id="flashDifficult">★ Нужно повторить</button><button class="btn" id="flashKnown">✓ Знаю</button></div>${difficult.has(item.id)?'<button class="small-btn flash-clear" id="flashClear">Убрать из трудных</button>':''}<div class="flashcard-navigation"><button class="small-btn" id="flashPrev">← Назад</button><button class="small-btn" id="flashNext">Дальше →</button></div>`:'<div class="flashcard-empty"><h3>Трудных карточек пока нет</h3><p>Отметь сложные выражения кнопкой «Нужно повторить».</p></div>'}</section></div>`;
-    $('#back').onclick=studentFlashcardSets;
+    $('#back').onclick=teacherPreview?teacherFlashcardSets:studentFlashcardSets;
     $('#flashShuffle').onclick=()=>{order=shuffle(set.cards);index=0;flipped=false;render()};
     $('#flashReverse').onclick=()=>{reversed=!reversed;flipped=false;render()};
     $('#flashOnlyDifficult').onclick=()=>{onlyDifficult=!onlyDifficult;index=0;flipped=false;render()};
+    if(teacherPreview){$('.flashcard-study .eyebrow').insertAdjacentHTML('afterend','<p class="flashcard-preview-note">Режим просмотра преподавателя · отметки учеников не изменяются</p>');$('#flashOnlyDifficult').remove();$('.flashcard-study-actions')?.remove();$('.flash-clear')?.remove()}
     if(!item)return;
     $('#flipCard').onclick=()=>{flipped=!flipped;$('#flipCard .flip-card').classList.toggle('flipped',flipped);$('#flipCard').setAttribute('aria-pressed',String(flipped))};
     const mark=async kind=>{state.flashcardProgress=updateFlashcardProgress(state.flashcardProgress,set.id,item.id,kind);try{await save()}catch{toast('Не удалось сохранить отметку. Проверьте подключение.')}index=onlyDifficult?index:((index+1)%cards.length);flipped=false;render()};
-    $('#flashDifficult').onclick=()=>mark('difficult');
-    $('#flashKnown').onclick=()=>mark('known');
-    if($('#flashClear'))$('#flashClear').onclick=()=>mark('clear');
+    if(!teacherPreview){$('#flashDifficult').onclick=()=>mark('difficult');$('#flashKnown').onclick=()=>mark('known');if($('#flashClear'))$('#flashClear').onclick=()=>mark('clear')}
     $('#flashPrev').onclick=()=>{index=(index-1+cards.length)%cards.length;flipped=false;render()};
     $('#flashNext').onclick=()=>{index=(index+1)%cards.length;flipped=false;render()};
   };render();

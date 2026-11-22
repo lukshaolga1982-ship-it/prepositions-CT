@@ -10,9 +10,12 @@ import { ctTip } from './ct-tips.js';
 import { isTeacherPreview, isCourseCardLocked, isCheckpointLocked, shouldRecordTraining } from './teacher-preview.js';
 import { parseFlashcards, updateFlashcardProgress } from './flashcards.js';
 import { parseLearningEmbed } from './embed-utils.js';
+import { suggestActivities, ACTIVITY_LABELS } from './activity-suggestions.js';
+import { cleanAIDrafts, collectExistingSentences } from './ai-activity-utils.js';
 
 const firebaseConfig={apiKey:'AIzaSyBqxNT9EJLIFFazHKgDuBesC6CJt6Y8kZY',authDomain:'prepositions-ct.firebaseapp.com',projectId:'prepositions-ct',storageBucket:'prepositions-ct.firebasestorage.app',messagingSenderId:'185533456216',appId:'1:185533456216:web:b975529378af9dfc2a4f2d',measurementId:'G-MSQK3VZE9F'};
 const firebaseApp=initializeApp(firebaseConfig),auth=getAuth(firebaseApp),firestore=getFirestore(firebaseApp);
+const AI_GENERATOR_ENDPOINT='https://prepositions-ct-ai.lukshaolga1982.workers.dev/generate';
 const $=s=>document.querySelector(s);let db,state,currentUser,currentRole,currentProfile,session,ctSession,loginMotivation='You are ready for the next step!';
 const EMPTY={unlocked:1,completed:{},stars:0,streak:1,errors:[],mistakeHistory:[],checkpointAttempts:[],checkpointMistakes:[],ctMistakes:[],ctAttempts:[]};
 const modules=['Everyday Life','Learning & Growth','People & Communication','The World Around Us','Health & Safety','Work & Society','Advanced Structures'];
@@ -204,6 +207,116 @@ function showEmbeddedActivity(item,teacherPreview=false){
   $('#back').onclick=teacherPreview?teacherEmbeddedActivities:studentEmbeddedActivities;
   if(teacherPreview){$('.embed-study .eyebrow').insertAdjacentHTML('afterend','<p class="flashcard-preview-note">Режим просмотра преподавателя · результаты не сохраняются</p>')}
 }
+function teacherActivitySuggestions(set,prepared=null){
+  if(currentRole!=='teacher'||!set)return;
+  const suggestions=prepared||suggestActivities(set.cards,db.expressions);
+  const labels=Object.entries(ACTIVITY_LABELS);
+  $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К наборам</button><section class="flashcard-intro"><div class="eyebrow">ACTIVITY BUILDER · PREPOSITION QUEST CT</div><h2>Задания к <i>набору</i></h2><p>${esc(set.title)} · автоматические предложения на основе ваших выражений и проверенных примеров.</p></section><div class="activity-notice">Matching создаётся из всех пар. Остальные форматы требуют предложений с выражениями. Если примеров недостаточно, добавьте к выражению третий столбец с целым предложением. Просмотрите и при необходимости исправьте задания перед публикацией.</div><div class="flashcard-set-grid">${labels.map(([key,label])=>{const tasks=suggestions[key],published=(set.activities?.[key]||[]).length;return`<section class="panel flashcard-set-tile"><span class="eyebrow">${esc(key.toUpperCase())} · ${tasks.length} предложений</span><h3>${esc(label)}</h3><p>${published?'Опубликовано: '+published:'Ещё не опубликовано'}</p><div class="hero-actions">${tasks.length?`<button class="btn secondary" data-suggest-preview="${key}">Просмотреть</button>${key!=='matching'?`<button class="btn secondary" data-suggest-edit="${key}">Исправить</button>`:''}<button class="btn" data-suggest-publish="${key}">Опубликовать</button>`:'<span class="activity-unavailable">Нужно больше контекста</span>'}${published?`<button class="small-btn" data-suggest-unpublish="${key}">Снять</button>`:''}</div></section>`}).join('')}</div></div>`;
+  $('#back').onclick=teacherFlashcardSets;
+  document.querySelectorAll('[data-suggest-preview]').forEach(b=>b.onclick=()=>runGeneratedActivity({title:set.title,activities:suggestions},b.dataset.suggestPreview,true,()=>teacherActivitySuggestions(set,suggestions)));
+  document.querySelectorAll('[data-suggest-edit]').forEach(b=>b.onclick=()=>editSuggestedTasks(set,b.dataset.suggestEdit,suggestions));
+  labels.filter(([key])=>key!=='matching').forEach(([key],i)=>{
+    const tile=$('.flashcard-set-grid')?.children[i+1];
+    if(!tile)return;
+    tile.querySelector('.hero-actions').insertAdjacentHTML('beforeend',`<button class="small-btn" data-suggest-add="${key}">+ Своё задание</button>`);
+    tile.querySelector('.hero-actions').insertAdjacentHTML('beforeend',`<button class="btn ai-generate-btn" data-suggest-ai="${key}">✦ Создать с ИИ</button>`);
+  });
+  document.querySelectorAll('[data-suggest-ai]').forEach(button=>button.onclick=async()=>{
+    const key=button.dataset.suggestAi;
+    button.disabled=true;button.textContent='Создаём предложения…';
+    try{
+      const expressions=shuffle(set.cards||[]).slice(0,6).map(card=>({expression:card.front,translation:card.back}));
+      if(!expressions.length)throw Error('В наборе пока нет выражений.');
+      const allSets=await getDocs(query(collection(firestore,'flashcardSets'),where('teacherId','==',currentUser.uid)));
+      const published=allSets.docs.flatMap(d=>collectExistingSentences(d.data().activities));
+      const history=[...new Set([...published,...collectExistingSentences(suggestions)])];
+      const token=await currentUser.getIdToken();
+      const response=await fetch(AI_GENERATOR_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({format:key,expressions,existingSentences:shuffle(history).slice(0,40).map(s=>s.slice(0,200))})});
+      let result;try{result=await response.json()}catch{throw Error('Сервис ИИ вернул некорректный ответ.')}
+      if(!response.ok)throw Error(response.status===403?'Сервис отклонил доступ. Проверьте SITE_ORIGIN и вход преподавателя.':response.status===503?'Укажите SITE_ORIGIN в настройках Worker.':result.error||`Ошибка ИИ: ${response.status}`);
+      const generated=cleanAIDrafts(key,result.tasks,history);
+      if(!generated.length)throw Error('Новых подходящих предложений не найдено. Попробуйте ещё раз или добавьте свои примеры.');
+      const prepared={...suggestions,[key]:[...suggestions[key],...generated]};
+      toast(`Получено ${generated.length} новых черновиков`);
+      editSuggestedTasks(set,key,prepared);
+    }catch(error){const message=error.message||'Не удалось вызвать ИИ';button.closest('.flashcard-set-tile').querySelector('.ai-error')?.remove();button.closest('.flashcard-set-tile').insertAdjacentHTML('beforeend',`<p class="ai-error" role="alert">${esc(message)}</p>`);toast('Не удалось получить новые задания');button.disabled=false;button.textContent='✦ Создать с ИИ'}
+  });
+  document.querySelectorAll('[data-suggest-add]').forEach(b=>b.onclick=()=>{
+    const key=b.dataset.suggestAdd;
+    const blank=key==='b7'?{first:'',second:'',answer:''}:key==='b19'?{original:'',template:'',keyword:'',answer:''}:{prompt:'',answer:'',hint:''};
+    editSuggestedTasks(set,key,{...suggestions,[key]:[...suggestions[key],{id:`manual_${Date.now()}`,...blank}]});
+  });
+  document.querySelectorAll('[data-suggest-publish]').forEach(b=>b.onclick=async()=>{
+    const key=b.dataset.suggestPublish;
+    if(!confirm(`Опубликовать «${ACTIVITY_LABELS[key]}» (${suggestions[key].length} заданий) всем ученикам, которым назначен этот набор?`))return;
+    try{const activities={...(set.activities||{}),[key]:suggestions[key]};await updateDoc(doc(firestore,'flashcardSets',set.id),{activities,updatedAt:serverTimestamp()});set={...set,activities};toast('Задания опубликованы');teacherActivitySuggestions(set,suggestions)}catch{toast('Не удалось опубликовать задания')}
+  });
+  document.querySelectorAll('[data-suggest-unpublish]').forEach(b=>b.onclick=async()=>{
+    const key=b.dataset.suggestUnpublish;if(!confirm('Снять эти задания с публикации?'))return;
+    try{const activities={...(set.activities||{})};delete activities[key];await updateDoc(doc(firestore,'flashcardSets',set.id),{activities,updatedAt:serverTimestamp()});set={...set,activities};teacherActivitySuggestions(set,suggestions)}catch{toast('Не удалось снять задания')}
+  });
+}
+function editSuggestedTasks(set,format,prepared){
+  const fields=format==='b7'?['first','second','answer']:format==='b19'?['original','template','keyword','answer']:['prompt','answer','hint'];
+  const tasks=prepared[format]||[];
+  $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К форматам</button><section class="flashcard-intro"><div class="eyebrow">EDITORIAL REVIEW</div><h2>${esc(ACTIVITY_LABELS[format])}</h2><p>Исправьте формулировки и ответы, отключите неудачные примеры. После проверки нажмите «Готово», затем «Опубликовать».</p></section><form id="suggestTaskForm" class="activity-review-form">${tasks.map((t,i)=>`<section class="panel activity-review-item"><div class="activity-review-head"><strong>Задание ${i+1}</strong><label><input name="include-${i}" type="checkbox" checked> Включить</label></div>${fields.map(k=>`<label>${esc(({first:'Предложение 1',second:'Предложение 2',original:'Исходное предложение',template:'Перефраз с пропуском',keyword:'Опорное слово',prompt:'Предложение с пропуском',answer:'Правильный ответ',hint:'Подсказка / перевод'})[k])}<textarea name="${i}-${k}" rows="${['prompt','first','second','original','template'].includes(k)?2:1}">${esc(t[k]||'')}</textarea></label>`).join('')}</section>`).join('')}<p id="suggestEditError" class="auth-error" role="alert"></p><button class="btn" type="submit">Готово · сохранить черновик</button></form></div>`;
+  $('#back').onclick=()=>teacherActivitySuggestions(set,prepared);
+  $('#suggestTaskForm').onsubmit=e=>{
+    e.preventDefault();const updated=[];
+    for(let i=0;i<tasks.length;i++){
+      if(!document.querySelector(`[name="include-${i}"]`).checked)continue;
+      const t={...tasks[i]};for(const field of fields)t[field]=document.querySelector(`[name="${i}-${field}"]`).value.trim();
+      if(t.answer!==tasks[i].answer)delete t.acceptedAnswers;
+      if(!t.answer||fields.some(f=>f!=='hint'&&!t[f])){$('#suggestEditError').textContent=`Задание ${i+1}: заполните обязательные поля.`;return}
+      if(format==='b7'&&(!t.first.includes('___')||!t.second.includes('___'))){$('#suggestEditError').textContent=`Задание ${i+1}: в обоих предложениях нужен пропуск ___.`;return}
+      if(format==='b19'&&!t.template.includes('___')){$('#suggestEditError').textContent=`Задание ${i+1}: в перефразировании нужен пропуск ___.`;return}
+      if(!['b7','b19'].includes(format)&&!t.prompt.includes('___')){$('#suggestEditError').textContent=`Задание ${i+1}: в предложении нужен пропуск ___.`;return}
+      updated.push(t);
+    }
+    teacherActivitySuggestions(set,{...prepared,[format]:updated});
+  };
+}
+function runGeneratedActivity(set,format,teacherPreview=false,back=studentGeneratedActivities){
+  if(!set||!ACTIVITY_LABELS[format])return;
+  const pool=(set.activities?.[format]||[]);
+  if(!pool.length)return;
+  const questions=shuffle(pool).slice(0,20);let index=0,correct=0,finished=false;
+  const render=()=>{
+    const task=questions[index],isMatching=format==='matching',isQuiz=format==='quiz',isChoice=isMatching||isQuiz;
+    if(finished){
+      $('#app').innerHTML=`<div class="view trainer"><section class="question-card result"><div class="eyebrow">${teacherPreview?'ПРОСМОТР':'РЕЗУЛЬТАТ'} · ${esc(ACTIVITY_LABELS[format])}</div><h2>${correct} из ${questions.length}</h2><p>${teacherPreview?'Пробный результат не сохраняется.':'Можешь пройти задания ещё раз.'}</p><div class="hero-actions"><button class="btn" id="generatedAgain">Ещё раз</button><button class="btn secondary" id="generatedBack">Назад</button></div></section></div>`;
+      $('#generatedAgain').onclick=()=>runGeneratedActivity(set,format,teacherPreview,back);$('#generatedBack').onclick=back;return;
+    }
+    const other=questions.filter(t=>t!==task).map(t=>isMatching?t.back:t.answer).filter(v=>v&&v!==(isMatching?task.back:task.answer));
+    const choices=shuffle([isMatching?task.back:task.answer,...new Set(shuffle(other))].slice(0,4));
+    const prompt=isMatching?task.front:format==='b7'?`${task.first}\n\n${task.second}`:format==='b19'?`${task.original}\n\n${task.template}`:task.prompt;
+    $('#app').innerHTML=`<div class="view trainer generated-training"><button class="back" id="generatedBack">← К заданиям</button><section class="question-card"><div class="eyebrow">${teacherPreview?'ПРОСМОТР · ':''}${esc(ACTIVITY_LABELS[format])} · ${index+1} / ${questions.length}</div><h2>${esc(prompt)}</h2>${format==='b19'?`<p class="ct-keyword">${esc(task.keyword)}</p>`:''}${task.hint?`<p class="flashcard-hint">Подсказка: ${esc(task.hint)}</p>`:''}${isChoice?`<div class="generated-choices">${choices.map((c,i)=>`<button class="btn secondary" data-generated-choice="${i}">${esc(c)}</button>`).join('')}</div>`:`<form id="generatedAnswerForm"><label class="generated-label">Впиши ответ<input id="generatedAnswer" autocomplete="off" required placeholder="Твой ответ"></label><button class="btn" type="submit">Проверить</button></form>`}<div id="generatedFeedback" class="generated-feedback" role="status"></div><div class="hero-actions"><button class="btn hidden" id="generatedNext">Следующее →</button></div></section></div>`;
+    $('#generatedBack').onclick=back;
+    const check=given=>{
+      const answer=isMatching?task.back:task.answer;
+      const normalize=s=>String(s||'').trim().toLowerCase().replace(/[’‘]/g,"'").replace(/\s+/g,' ').replace(/[.!?]+$/,'');
+      const ok=(task.acceptedAnswers||[answer]).some(v=>normalize(v)===normalize(given));if(ok)correct++;
+      $('#generatedFeedback').innerHTML=`<strong class="${ok?'correct':'incorrect'}">${ok?'Верно!':'Попробуй запомнить:'}</strong> ${esc(answer)}`;
+      document.querySelectorAll('[data-generated-choice]').forEach(b=>b.disabled=true);
+      if($('#generatedAnswer'))$('#generatedAnswer').disabled=true;
+      const submit=$('#generatedAnswerForm button[type=submit]');if(submit)submit.disabled=true;
+      $('#generatedNext').classList.remove('hidden');$('#generatedNext').textContent=index===questions.length-1?'Завершить':'Следующее →';$('#generatedNext').onclick=()=>{index++;if(index>=questions.length)finished=true;render()};
+    };
+    if(isChoice)document.querySelectorAll('[data-generated-choice]').forEach(b=>b.onclick=()=>check(b.textContent));
+    else $('#generatedAnswerForm').onsubmit=e=>{e.preventDefault();check($('#generatedAnswer').value)};
+  };render();
+}
+async function studentGeneratedActivities(){
+  if(currentRole!=='student')return;
+  try{
+    const snap=await getDocs(query(collection(firestore,'flashcardSets'),where('assignedTo','array-contains',currentUser.uid)));
+    const sets=snap.docs.map(d=>({id:d.id,...d.data()})).filter(s=>s.teacherId===state.teacherId);
+    const entries=sets.flatMap(s=>Object.entries(s.activities||{}).filter(([,tasks])=>tasks?.length).map(([key,tasks])=>({set:s,key,count:tasks.length})));
+    $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К карте курса</button><section class="flashcard-intro"><div class="eyebrow">PRACTICE LAB</div><h2>Задания <i>по наборам</i></h2><p>Тренируй выражения в разных форматах, включая задания в стиле ЦТ.</p></section><div class="flashcard-set-grid">${entries.map((e,i)=>`<button class="panel flashcard-set-tile flashcard-set-button" data-generated-set="${e.set.id}" data-generated-format="${e.key}"><span class="flashcard-set-index">${String(i+1).padStart(2,'0')}</span><span class="eyebrow">${e.count} заданий</span><h3>${esc(ACTIVITY_LABELS[e.key])}</h3><p>${esc(e.set.title)}</p><span class="flashcard-open-label">Начать →</span></button>`).join('')||'<section class="panel flashcard-empty"><h3>Заданий пока нет</h3><p>Преподаватель сможет опубликовать задания из своего набора карточек.</p></section>'}</div></div>`;
+    $('#back').onclick=home;
+    document.querySelectorAll('[data-generated-set]').forEach(b=>b.onclick=()=>runGeneratedActivity(sets.find(s=>s.id===b.dataset.generatedSet),b.dataset.generatedFormat));
+  }catch{toast('Не удалось загрузить задания');home()}
+}
 async function teacherFlashcardSets(){
   if(currentRole!=='teacher')return;
   try{
@@ -214,6 +327,8 @@ async function teacherFlashcardSets(){
     $('#newFlashcardSet').onclick=()=>editFlashcardSet();
     document.querySelectorAll('[data-flash-edit]').forEach(b=>{const id=b.dataset.flashEdit;b.insertAdjacentHTML('beforebegin',`<button class="btn" data-flash-preview="${id}">Просмотреть</button>`)});
     document.querySelectorAll('[data-flash-preview]').forEach(b=>b.onclick=()=>studyFlashcardSet(sets.find(s=>s.id===b.dataset.flashPreview),true));
+    document.querySelectorAll('[data-flash-edit]').forEach(b=>{const id=b.dataset.flashEdit;b.insertAdjacentHTML('beforebegin',`<button class="btn secondary" data-flash-activities="${id}">Создать задания</button>`)});
+    document.querySelectorAll('[data-flash-activities]').forEach(b=>b.onclick=()=>teacherActivitySuggestions(sets.find(s=>s.id===b.dataset.flashActivities)));
     document.querySelectorAll('[data-flash-edit]').forEach(b=>b.onclick=()=>editFlashcardSet(sets.find(s=>s.id===b.dataset.flashEdit)));
     document.querySelectorAll('[data-flash-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('Удалить этот набор у всех назначенных учеников?'))return;try{await deleteDoc(doc(firestore,'flashcardSets',b.dataset.flashDelete));teacherFlashcardSets()}catch{toast('Не удалось удалить набор')}});
   }catch{toast('Не удалось получить наборы. Опубликуйте новые правила Firestore.');teacherDashboardV2()}
@@ -223,10 +338,13 @@ async function editFlashcardSet(existing=null){
   try{
     const snap=await getDocs(query(collection(firestore,'students'),where('teacherId','==',currentUser.uid)));
     const students=snap.docs.map(d=>({id:d.id,...d.data()}));
-    const lines=(existing?.cards||[]).map(c=>`${c.front}\t${c.back}`).join('\n');
+    const lines=(existing?.cards||[]).map(c=>`${c.front}\t${c.back}${c.example?'\t'+c.example:''}`).join('\n');
     $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К наборам</button><section class="panel flashcard-editor"><div class="eyebrow">FLASHCARD STUDIO</div><h2>${existing?'Редактировать набор':'Новый набор'}</h2><form id="flashcardSetForm" class="auth-form"><label>Название набора<input id="flashTitle" maxlength="100" required value="${esc(existing?.title||'')}" placeholder="Например, Phrasal verbs · Unit 1"></label><label>Выражение и перевод — через Tab, каждая пара с новой строки<textarea id="flashPairs" rows="12" required placeholder="look after\tзаботиться о\nbe interested in\tинтересоваться">${esc(lines)}</textarea></label><p class="flashcard-hint">Можно скопировать два столбца из Excel или Google Таблиц. До 200 карточек в наборе. При изменении порядка карточек отметки ученика могут потребовать повторения.</p><fieldset class="flashcard-assign"><legend>Назначить ученикам</legend>${students.map(s=>`<label><input type="checkbox" name="flashStudent" value="${s.id}" ${(existing?.assignedTo||[]).includes(s.id)?'checked':''}><span>${esc(s.displayName)}</span></label>`).join('')||'<p>Сначала создайте ученика в кабинете.</p>'}</fieldset><p class="auth-error" id="flashError" role="alert"></p><button class="btn" type="submit">${existing?'Сохранить изменения':'Создать набор'}</button></form></section></div>`;
     $('#back').onclick=teacherFlashcardSets;
     const pairsInput=$('#flashPairs');
+    pairsInput.closest('label').childNodes[0].textContent='Английское выражение ⇥ перевод ⇥ пример предложения (необязательно)';
+    pairsInput.placeholder='look after\tзаботиться о\tI look after my little sister.\nbe interested in\tинтересоваться\tShe is interested in art.';
+    $('.flashcard-editor .flashcard-hint').textContent='Вставьте 2–3 столбца из таблицы. Третий столбец — целое предложение с английским выражением — помогает автоматически создавать Quiz, задания на артикли, предлоги и форматы ЦТ. До 200 выражений. После редактирования набора перепроверьте и переопубликуйте задания.';
     pairsInput.addEventListener('keydown',event=>{
       if(event.key==='Tab'&&!event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey){
         event.preventDefault();
@@ -284,7 +402,7 @@ function studyFlashcardSet(set,teacherPreview=false){
 async function routeUser(u){currentUser=u;if(!u){currentRole=null;currentProfile=null;authScreen();return}try{const[role,data]=await detectRole(u);currentRole=role;currentProfile=data;if(role==='teacher'){state={...EMPTY,completed:{},errors:[],name:data.displayName||'Преподаватель'};await loadCustomExpressions(u.uid);teacherDashboardV2();return}if(role==='student'){await loadCustomExpressions(data.teacherId||null);loginMotivation=loginMotivations[Math.floor(Math.random()*loginMotivations.length)];state={...EMPTY,...data,...recoverMistakes(data),name:data.displayName};const avatar=avatarFor(state.name);setTop(state.name,state.name.slice(0,2).toUpperCase(),avatar);home();return}await signOut(auth);authScreen();$('#authError').textContent='Профиль не найден в базе.'}catch{authScreen();$('#authError').textContent='Не удалось загрузить профиль. Проверьте правила Firestore.'}}
 async function init(){try{db=await fetch('data/expressions.json').then(r=>r.json());onAuthStateChanged(auth,routeUser)}catch{$('#app').innerHTML='<section class="panel" style="padding:30px"><h1>Не удалось загрузить сайт</h1><p>Откройте его через GitHub Pages.</p></section>'}}
 const showCourseMap=home;
-home=function(){showCourseMap();if(currentRole==='student'){$('.journey-copy .hero-actions')?.insertAdjacentHTML('beforeend','<button class="btn secondary" id="assignedFlashcards">Карточки от преподавателя</button><button class="btn secondary" id="assignedEmbeds">Wordwall / Quizlet</button>');if($('#assignedFlashcards'))$('#assignedFlashcards').onclick=studentFlashcardSets;if($('#assignedEmbeds'))$('#assignedEmbeds').onclick=studentEmbeddedActivities}};
+home=function(){showCourseMap();if(currentRole==='student'){$('.journey-copy .hero-actions')?.insertAdjacentHTML('beforeend','<button class="btn secondary" id="assignedFlashcards">Карточки от преподавателя</button><button class="btn secondary" id="assignedGenerated">Задания по наборам</button><button class="btn secondary" id="assignedEmbeds">Wordwall / Quizlet</button>');if($('#assignedFlashcards'))$('#assignedFlashcards').onclick=studentFlashcardSets;if($('#assignedGenerated'))$('#assignedGenerated').onclick=studentGeneratedActivities;if($('#assignedEmbeds'))$('#assignedEmbeds').onclick=studentEmbeddedActivities}};
 $('#profileBtn').addEventListener('click',()=>currentUser?toast(currentRole==='teacher'?'Кабинет преподавателя':state.name):toast('Сначала войдите'));$('#logoutBtn').addEventListener('click',async()=>{try{await logout()}catch{toast('Не удалось выйти. Обновите страницу и попробуйте снова.')}});$('#feedbackBtn').addEventListener('click',()=>{if(currentRole==='student')feedbackDialog();else toast('Связь доступна после входа ученика')});$('#infoBtn').addEventListener('click',glossary);document.addEventListener('click',e=>{if(e.target.closest('#attempts'))checkpointHistory()});init();
 document.addEventListener('click',e=>{if(e.target.closest('#mistakes')){e.stopPropagation();showMistakeBank()}},true);
 document.addEventListener('click',e=>{if(e.target.closest('#ctFormats'))showCTFormats()});

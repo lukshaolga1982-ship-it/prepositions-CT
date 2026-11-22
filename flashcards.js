@@ -4,9 +4,9 @@ export function parseFlashcards(input){
   const cards=[];
   for(const [index,line] of lines.entries()){
     const pieces=line.split('\t').map(s=>s.trim());
-    if(pieces.length!==2||!pieces[0]||!pieces[1])throw Error(`Строка ${index+1}: разделите выражение и перевод клавишей Tab.`);
+    if(pieces.length<2||pieces.length>3||!pieces[0]||!pieces[1])throw Error(`Строка ${index+1}: разделите выражение, перевод и необязательное предложение клавишей Tab.`);
     if(pieces.some(s=>s.length>300))throw Error(`Строка ${index+1}: слишком длинный текст (максимум 300 символов).`);
-    cards.push({id:`c${index+1}`,front:pieces[0],back:pieces[1]});
+    cards.push({id:`c${index+1}`,front:pieces[0],back:pieces[1],...(pieces[2]?{example:pieces[2]}:{})});
   }
   if(!cards.length)throw Error('Добавьте хотя бы одну пару «выражение — перевод».');
   return cards;

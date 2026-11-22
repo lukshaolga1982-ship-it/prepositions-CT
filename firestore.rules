@@ -104,5 +104,32 @@ service cloud.firestore {
       allow delete: if isTeacher()
                     && resource.data.teacherId == request.auth.uid;
     }
+
+    // Собственные наборы преподавателя: ученики видят только назначенные им.
+    match /flashcardSets/{setId} {
+      allow read: if (isTeacher() && resource.data.teacherId == request.auth.uid)
+                  || (isStudentOf(resource.data.teacherId)
+                      && request.auth.uid in resource.data.assignedTo);
+
+      allow create: if isTeacher()
+                    && request.resource.data.teacherId == request.auth.uid
+                    && request.resource.data.title is string
+                    && request.resource.data.title.size() <= 100
+                    && request.resource.data.cards is list
+                    && request.resource.data.cards.size() >= 1
+                    && request.resource.data.cards.size() <= 200
+                    && request.resource.data.assignedTo is list;
+
+      allow update: if isTeacher()
+                    && resource.data.teacherId == request.auth.uid
+                    && request.resource.data.teacherId == resource.data.teacherId
+                    && request.resource.data.cards is list
+                    && request.resource.data.cards.size() >= 1
+                    && request.resource.data.cards.size() <= 200
+                    && request.resource.data.assignedTo is list;
+
+      allow delete: if isTeacher()
+                    && resource.data.teacherId == request.auth.uid;
+    }
   }
 }

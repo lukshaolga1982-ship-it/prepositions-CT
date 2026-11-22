@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Preposition Quest CT — migration</title>
+  <style>
+    body{font:16px system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 20px;line-height:1.5;background:#120d2e;color:#fff}
+    .card{background:#21194f;border:1px solid #514a78;border-radius:20px;padding:24px}
+    label{display:grid;gap:6px;margin:14px 0}input{padding:12px;border-radius:10px;border:1px solid #6d6594;background:#0e0a25;color:#fff}
+    button{padding:12px 18px;border:0;border-radius:10px;background:#7657ff;color:#fff;font-weight:700;cursor:pointer}.warn{color:#ffd68a}.ok{color:#8ef2c0}pre{white-space:pre-wrap;background:#0e0a25;padding:14px;border-radius:12px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Одноразовая привязка старых данных</h1>
+    <p class="warn">Используйте эту страницу только ДО публикации новых Firestore Rules и только для вашего старого кабинета. После успешной миграции удалите migration.html с сайта.</p>
+    <label>Email преподавателя<input id="email" type="email"></label>
+    <label>Пароль<input id="password" type="password"></label>
+    <button id="run">Привязать старых учеников и данные к моему кабинету</button>
+    <pre id="log">Готово к запуску.</pre>
+  </div>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js';
+import { getFirestore, collection, getDocs, doc, getDoc, updateDoc } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
+const firebaseConfig={apiKey:'AIzaSyBqxNT9EJLIFFazHKgDuBesC6CJt6Y8kZY',authDomain:'prepositions-ct.firebaseapp.com',projectId:'prepositions-ct',storageBucket:'prepositions-ct.firebasestorage.app',messagingSenderId:'185533456216',appId:'1:185533456216:web:b975529378af9dfc2a4f2d',measurementId:'G-MSQK3VZE9F'};
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),log=document.querySelector('#log');
+const say=t=>log.textContent+=`\n${t}`;
+document.querySelector('#run').onclick=async()=>{
+  log.textContent='Начинаю…';
+  try{
+    const credential=await signInWithEmailAndPassword(auth,document.querySelector('#email').value.trim(),document.querySelector('#password').value);
+    const teacherRef=doc(db,'teachers',credential.user.uid),teacherSnap=await getDoc(teacherRef);
+    if(!teacherSnap.exists())throw new Error('Для этого аккаунта нет документа teachers/{uid}.');
+    const teacherName=teacherSnap.data().displayName||credential.user.email||'Преподаватель';
+    const uid=credential.user.uid;
+    say(`UID преподавателя: ${uid}`);
+
+    let count=0;
+    const students=await getDocs(collection(db,'students'));
+    for(const d of students.docs){
+      if(!d.data().teacherId){await updateDoc(d.ref,{teacherId:uid,teacherName});count++}
+    }
+    say(`Ученики: обновлено ${count}`);
+
+    count=0;
+    const access=await getDocs(collection(db,'studentAccess'));
+    for(const d of access.docs){if(!d.data().teacherId){await updateDoc(d.ref,{teacherId:uid});count++}}
+    say(`Коды доступа: обновлено ${count}`);
+
+    count=0;
+    const feedback=await getDocs(collection(db,'feedback'));
+    for(const d of feedback.docs){if(!d.data().teacherId){await updateDoc(d.ref,{teacherId:uid});count++}}
+    say(`Сообщения: обновлено ${count}`);
+
+    count=0;
+    const custom=await getDocs(collection(db,'customExpressions'));
+    for(const d of custom.docs){if(!d.data().teacherId){await updateDoc(d.ref,{teacherId:uid});count++}}
+    say(`Пользовательские выражения: обновлено ${count}`);
+    say('ГОТОВО. Теперь опубликуйте новые firestore.rules и удалите migration.html.');
+    await signOut(auth);
+  }catch(e){say(`ОШИБКА: ${e.message}`)}
+};
+</script>
+</body>
+</html>

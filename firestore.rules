@@ -6,42 +6,103 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function teacherExists(uid) {
+      return exists(/databases/$(database)/documents/teachers/$(uid));
+    }
+
     function isTeacher() {
+      return signedIn() && teacherExists(request.auth.uid);
+    }
+
+    function isStudent() {
       return signedIn()
-        && exists(/databases/$(database)/documents/teachers/$(request.auth.uid));
+        && exists(/databases/$(database)/documents/students/$(request.auth.uid));
+    }
+
+    function isStudentOf(teacherId) {
+      return isStudent()
+        && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.teacherId == teacherId;
     }
 
     match /teachers/{teacherId} {
       allow read: if signedIn() && request.auth.uid == teacherId;
-      allow write: if false;
+
+      // Самостоятельная регистрация преподавателя.
+      // Ученик не может повысить свой аккаунт до преподавательского.
+      allow create: if signedIn()
+                    && request.auth.uid == teacherId
+                    && !exists(/databases/$(database)/documents/students/$(teacherId))
+                    && request.resource.data.email == request.auth.token.email;
+
+      // Преподаватель может редактировать только собственный профиль.
+      allow update: if isTeacher()
+                    && request.auth.uid == teacherId
+                    && request.resource.data.email == resource.data.email;
+      allow delete: if false;
     }
 
     match /students/{studentId} {
-      allow read: if isTeacher() || (signedIn() && request.auth.uid == studentId);
-      allow create: if isTeacher();
-      allow update: if isTeacher() || (signedIn() && request.auth.uid == studentId);
-      allow delete: if isTeacher();
+      allow read: if (isTeacher() && resource.data.teacherId == request.auth.uid)
+                  || (signedIn() && request.auth.uid == studentId);
+
+      allow create: if isTeacher()
+                    && request.resource.data.teacherId == request.auth.uid;
+
+      allow update: if (isTeacher()
+                        && resource.data.teacherId == request.auth.uid
+                        && request.resource.data.teacherId == resource.data.teacherId)
+                    || (signedIn()
+                        && request.auth.uid == studentId
+                        && request.resource.data.teacherId == resource.data.teacherId
+                        && request.resource.data.teacherName == resource.data.teacherName);
+
+      allow delete: if isTeacher()
+                    && resource.data.teacherId == request.auth.uid;
 
       match /{document=**} {
-        allow read, write: if isTeacher() || (signedIn() && request.auth.uid == studentId);
+        allow read, write: if (isTeacher()
+                              && get(/databases/$(database)/documents/students/$(studentId)).data.teacherId == request.auth.uid)
+                           || (signedIn() && request.auth.uid == studentId);
       }
     }
 
-    match /feedback/{messageId} {
-      allow create: if signedIn()
-                    && request.resource.data.studentId == request.auth.uid;
+    match /studentAccess/{studentId} {
       allow read: if isTeacher()
-                  || (signedIn() && resource.data.studentId == request.auth.uid);
-      allow update, delete: if isTeacher();
+                  && resource.data.teacherId == request.auth.uid;
+      allow create: if isTeacher()
+                    && request.resource.data.teacherId == request.auth.uid;
+      allow update: if isTeacher()
+                    && resource.data.teacherId == request.auth.uid
+                    && request.resource.data.teacherId == resource.data.teacherId;
+      allow delete: if isTeacher()
+                    && resource.data.teacherId == request.auth.uid;
     }
 
-    match /studentAccess/{studentId} {
-      allow read, create, update, delete: if isTeacher();
+    match /feedback/{messageId} {
+      allow create: if isStudent()
+                    && request.resource.data.studentId == request.auth.uid
+                    && request.resource.data.teacherId == get(/databases/$(database)/documents/students/$(request.auth.uid)).data.teacherId;
+
+      allow read: if (isTeacher() && resource.data.teacherId == request.auth.uid)
+                  || (signedIn() && resource.data.studentId == request.auth.uid);
+
+      allow update, delete: if isTeacher()
+                            && resource.data.teacherId == request.auth.uid;
     }
 
     match /customExpressions/{expressionId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isTeacher();
+      allow read: if (isTeacher() && resource.data.teacherId == request.auth.uid)
+                  || isStudentOf(resource.data.teacherId);
+
+      allow create: if isTeacher()
+                    && request.resource.data.teacherId == request.auth.uid;
+
+      allow update: if isTeacher()
+                    && resource.data.teacherId == request.auth.uid
+                    && request.resource.data.teacherId == resource.data.teacherId;
+
+      allow delete: if isTeacher()
+                    && resource.data.teacherId == request.auth.uid;
     }
   }
 }

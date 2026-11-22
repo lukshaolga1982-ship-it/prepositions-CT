@@ -1,0 +1,37 @@
+import fs from 'node:fs';
+const path=new URL('../data/expressions.json',import.meta.url),data=JSON.parse(fs.readFileSync(path,'utf8'));
+const examples={
+exp_0060:['My sister is ___ home today.','The students are ___ school until three.','My parents are ___ work now.'],
+exp_0362:['Twice five is equal ___ ten.','The two sides are equal ___ each other.','Your score is equal ___ mine.'],
+exp_0363:['The classroom is equipped ___ new computers.','The rescue team was equipped ___ special tools.','Each bicycle is equipped ___ bright lights.'],
+exp_0364:['The prisoners tried to escape ___ the building.','The family escaped ___ the burning house.','The bird escaped ___ its cage.'],
+exp_0365:['The refugees escaped ___ a neighbouring country.','They escaped ___ safety before the storm.','The family escaped ___ the mountains.'],
+exp_0366:['Clean water is essential ___ health.','Practice is essential ___ learning a language.','Sleep is essential ___ young children.'],
+exp_0367:['Our family has dinner together ___ Christmas Eve.','It snowed heavily ___ Christmas Eve.','They decorate the tree ___ Christmas Eve.'],
+exp_0369:['She is excellent ___ mathematics.','He is excellent ___ solving puzzles.','Our goalkeeper is excellent ___ catching the ball.'],
+exp_0370:['Everyone came except ___ Daniel.','The room was empty except ___ one chair.','The journey went well except ___ the traffic.'],
+exp_0374:['She was excited ___ the prospect of travelling abroad.','He felt excited ___ the thought of meeting his hero.','The children were excited ___ the prospect of a school trip.'],
+exp_0375:['The audience was excited ___ the unexpected result.','The children were excited ___ the magician’s tricks.','She was excited ___ the wonderful news.'],
+exp_0376:['There is no excuse ___ being rude.','He made an excuse ___ arriving late.','She could not find an excuse ___ her mistake.'],
+exp_0377:['The paintings are ___ exhibition this week.','Several historic costumes are ___ exhibition at the museum.','Her photographs will be ___ exhibition in May.'],
+exp_0378:['She is experienced ___ working with children.','The engineer is experienced ___ repairing old machines.','We need someone experienced ___ event planning.'],
+exp_0379:['Scientists experiment ___ different materials.','The children experimented ___ colours in art class.','Researchers are experimenting ___ new methods.'],
+exp_0380:['She is an expert ___ ancient history.','We spoke to an expert ___ computer security.','He became an expert ___ bird behaviour.'],
+exp_0381:['Can you explain the rule ___ me?','The guide explained the route ___ the tourists.','She explained the problem ___ her teacher.'],
+exp_0382:['I saw the accident ___ my own eyes.','She watched the performance ___ her own eyes.','We saw the rare bird ___ our own eyes.'],
+exp_0384:['They finally met face ___ face.','We discussed the issue face ___ face.','The rivals stood face ___ face before the match.'],
+exp_0387:['He failed ___ his attempt to break the record.','The company failed ___ its efforts to save money.','She refused to accept that she had failed ___ her mission.'],
+exp_0388:['His failure ___ mathematics surprised the teacher.','The project’s failure ___ its first trial taught us a lot.','They discussed the failure ___ communication.'],
+exp_0390:['Be careful not to fall ___ the stairs.','The old fence fell ___ during the storm.','Several books fell ___ from the shelf.'],
+exp_0393:['She fell out ___ her best friend.','He fell out ___ his brother over a game.','They fell out ___ each other after the argument.'],
+exp_0394:['The two friends fell ___ over a misunderstanding.','They often fall ___ about small things.','I hope we never fall ___ again.'],
+exp_0395:['The old chair began to fall ___ pieces.','The toy fell ___ pieces after a week.','The damaged box fell ___ pieces in her hands.'],
+exp_0396:['Are you familiar ___ this writer’s work?','She is familiar ___ the safety rules.','The children were already familiar ___ the story.'],
+exp_0398:['Their house is far away ___ the town centre.','The campsite is far away ___ the main road.','Our village is far away ___ the coast.'],
+exp_0399:['The station is far ___ our house.','His answer was far ___ correct.','The final result was far ___ perfect.'],
+exp_0401:['These shoes are out ___ fashion now.','That style has gone out ___ fashion.','Some trends never go out ___ fashion.'],
+exp_0571:['My father goes ___ work by bike.','She has to go ___ work early tomorrow.','He did not go ___ work because he was ill.'],
+exp_0608:['Could you help me ___ my homework?','Her older brother helps her ___ maths homework.','The tutor helped the student ___ a difficult exercise.'],
+exp_0950:['Her retirement ___ teaching came last summer.','He announced his retirement ___ professional football.','The director’s retirement ___ the company surprised everyone.']
+};
+let n=0;for(const x of data.expressions){const s=examples[x.id];if(!s)continue;if(s.length!==3||s.some(v=>(v.match(/___/g)||[]).length!==1))throw Error(x.id);if(x.id==='exp_0379'){x.expression='experiment with';x.translation='экспериментировать с'}x.sentences=s;x.gapSentence=s[0];x.example=s[0].replace('___',x.answer);x.editorialStatus='reviewed';n++}if(n!==32)throw Error(n);fs.writeFileSync(path,JSON.stringify(data,null,2)+'\n');console.log('Reviewed',n);

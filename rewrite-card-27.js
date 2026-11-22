@@ -1,0 +1,37 @@
+import fs from 'node:fs';
+const path=new URL('../data/expressions.json',import.meta.url),data=JSON.parse(fs.readFileSync(path,'utf8'));
+const examples={
+exp_0008:['Please take the weather ___ account.','We should take her experience ___ account.','The teacher took our suggestions ___ account.'],
+exp_0124:['The cottage stands on the bank ___ the river.','We rested on the bank ___ the river.','A fisherman was sitting on the bank ___ the river.'],
+exp_0172:['She is in Berlin ___ business.','My uncle often travels ___ business.','He went to the capital ___ business.'],
+exp_0173:['He has to go ___ a business trip tomorrow.','She went ___ a business trip to Warsaw.','Our manager is going ___ a business trip next week.'],
+exp_0325:['We watched the birds ___ a distance.','The sign was hard to read ___ a distance.','Please keep the animals ___ a distance.'],
+exp_0326:['I recognised the building ___ a distance.','The castle is visible ___ a distance.','We heard the music ___ a distance.'],
+exp_0328:['Please do not distract me ___ my homework.','The noise distracted her ___ reading.','The bright lights distracted the driver ___ the road.'],
+exp_0331:['He does well ___ science at school.','She did well ___ her final exams.','The new student is doing well ___ English.'],
+exp_0332:['We watched a documentary ___ wild animals.','She made a documentary ___ climate change.','The class saw a documentary ___ space exploration.'],
+exp_0333:['They donated clothes ___ a local charity.','She donated money ___ the children’s hospital.','Our school donated books ___ the library.'],
+exp_0336:['The actors were dressed ___ black.','She dressed ___ warm clothes for the hike.','The children dressed ___ costumes for the festival.'],
+exp_0341:['He dusted ___ the old photograph.','She dusted ___ the books before reading them.','We dusted ___ the unused chairs.'],
+exp_0342:['A nurse is ___ duty throughout the night.','Which doctor is ___ duty this evening?','The security guard was ___ duty at the entrance.'],
+exp_0343:['The officer was ___ duty when we met him.','She is ___ duty tomorrow afternoon.','The nurse finally went ___ duty after a long shift.'],
+exp_0344:['The accent sounds unusual ___ my ears.','The name sounds familiar ___ my ears.','The phrase sounds slightly old-fashioned ___ my ears.'],
+exp_0347:['We usually visit our grandparents ___ Easter.','The town holds a fair ___ Easter.','Many families get together ___ Easter.'],
+exp_0349:['We often eat ___ on Fridays.','They decided to eat ___ after the concert.','She rarely eats ___ during the week.'],
+exp_0350:['I usually eat ___ my family in the evening.','Would you like to eat ___ us tonight?','He ate ___ his friends after the match.'],
+exp_0354:['The concert came ___ an end at midnight.','Their long journey finally came ___ an end.','The school year is coming ___ an end.'],
+exp_0355:['We ended ___ at the wrong station.','She ended ___ working abroad.','The discussion ended ___ taking two hours.'],
+exp_0356:['The story ends ___ a surprise.','The concert ended ___ a familiar song.','The lesson will end ___ a short quiz.'],
+exp_0358:['Please answer the question ___ English.','The instructions are written ___ English.','Can you explain it ___ English?'],
+exp_0361:['He was envious ___ his friend’s success.','She felt envious ___ her sister’s new bicycle.','They were envious ___ the winning team.'],
+exp_0522:['Every year, our class gives money ___ charity.','She decided to give part of her prize money ___ charity.','They give money ___ charity instead of buying gifts.'],
+exp_0538:['The firm may go ___ if sales keep falling.','Several shops went ___ during the crisis.','He was afraid the family business would go ___.'],
+exp_0548:['She will go ___ a business trip to Vilnius.','My father went ___ a business trip last month.','They are going ___ a business trip in June.'],
+exp_0827:['He is visiting the city ___ business.','She often flies abroad ___ business.','My parents are away ___ business this week.'],
+exp_0880:['Can I pay ___ cash?','She prefers to pay ___ cash at the market.','He paid ___ cash for the tickets.'],
+exp_0966:['We are saving money ___ a new computer.','She saves money ___ her studies.','They saved money ___ a summer holiday.'],
+exp_1010:['Do not spend all your money ___ games.','He spends too much money ___ clothes.','We spent some money ___ museum tickets.'],
+exp_1054:['You must take the cost ___ account.','The plan takes local needs ___ account.','Did you take the weather ___ account?'],
+exp_1119:['Do not waste your money ___ useless gadgets.','She wasted money ___ a broken device.','He does not want to waste money ___ unnecessary fees.']
+};
+let n=0;for(const x of data.expressions){const s=examples[x.id];if(!s)continue;if(s.length!==3||s.some(v=>(v.match(/___/g)||[]).length!==1))throw Error(x.id);if(x.id==='exp_0344'){x.expression='to my ears';x.translation='на мой слух'}x.sentences=s;x.gapSentence=s[0];x.example=s[0].replace('___',x.answer);x.editorialStatus='reviewed';n++}if(n!==32)throw Error(n);fs.writeFileSync(path,JSON.stringify(data,null,2)+'\n');console.log('Reviewed',n);

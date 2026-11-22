@@ -1,0 +1,37 @@
+import fs from 'node:fs';
+const path=new URL('../data/expressions.json',import.meta.url),data=JSON.parse(fs.readFileSync(path,'utf8'));
+const examples={
+exp_0035:['Her parents allow her ___ stay out until nine.','The teacher allowed us ___ use a dictionary.','The rules do not allow visitors ___ take photographs.'],
+exp_0145:['Do not blame me ___ your mistake.','She blamed her brother ___ the broken window.','The coach blamed himself ___ the defeat.'],
+exp_0402:['Many insects feed ___ plant leaves.','The young birds feed ___ small insects.','Whales sometimes feed ___ tiny sea creatures.'],
+exp_0405:['I feel sorry ___ the injured animal.','She felt sorry ___ her lonely neighbour.','We all felt sorry ___ the losing team.'],
+exp_0406:['The workers fought ___ better conditions.','She fought ___ the right to study.','The team fought ___ a place in the final.'],
+exp_0407:['The brothers often fight ___ each other.','He fought ___ a stronger opponent.','The villagers fought ___ the invaders.'],
+exp_0408:['Can you figure ___ how this machine works?','She finally figured ___ the answer.','We need to figure ___ why the lights went off.'],
+exp_0411:['I want to find out ___ local traditions.','She found out ___ the competition online.','You can find out ___ the course on our website.'],
+exp_0412:['The driver was fined ___ speeding.','They fined the shop ___ breaking the rules.','You may be fined ___ parking here.'],
+exp_0413:['Let us finish ___ this task before lunch.','He finished ___ the remaining cake.','She finished ___ her presentation with a question.'],
+exp_0415:['___ first, I did not understand the instructions.','___ first, she was afraid of the dog.','___ first, the journey seemed easy.'],
+exp_0416:['First ___ all, check your answers.','First ___ all, we need a clear plan.','First ___ all, thank you for coming.'],
+exp_0418:['These shoes are not fit ___ hiking.','The water is not fit ___ drinking.','The room is fit ___ a small meeting.'],
+exp_0419:['He found it hard to fit in ___ the new group.','Her ideas fit in ___ our plans.','This colour does not fit in ___ the design.'],
+exp_0420:['She soon began to fit ___ at her new school.','He wants to fit ___ with the other players.','It can take time to fit ___ in a new city.'],
+exp_0422:['The birds will fly ___ before winter.','A butterfly flew ___ when I opened the window.','The frightened pigeons flew ___ together.'],
+exp_0424:['Our relatives will fly ___ tomorrow morning.','Her parents flew ___ from Rome last night.','The guests are flying ___ for the wedding.'],
+exp_0425:['We will fly ___ Madrid next month.','She flew ___ Warsaw for the conference.','They plan to fly ___ London on Friday.'],
+exp_0426:['The students stayed focused ___ their work.','She is focused ___ improving her pronunciation.','He remained focused ___ his goal.'],
+exp_0427:['Please focus ___ the main question.','The lesson focuses ___ useful expressions.','Try to focus ___ what the speaker says.'],
+exp_0428:['She hopes to follow ___ her mother’s footsteps.','He followed ___ his grandfather’s footsteps and became a doctor.','Both children followed ___ their father’s footsteps.'],
+exp_0431:['My grandmother is very fond ___ gardening.','The children are fond ___ their new puppy.','He is not particularly fond ___ spicy food.'],
+exp_0433:['We reached the village ___ foot.','She goes to school ___ foot every day.','The old town is best explored ___ foot.'],
+exp_0435:['I cannot say ___ certain when he will arrive.','Nobody knows ___ certain what caused the problem.','We know ___ certain that the museum is closed.'],
+exp_0440:['He paints ___ pleasure, not for money.','They often read ___ pleasure.','She plays the piano ___ pleasure after work.'],
+exp_0442:['We go swimming ___ relaxation.','He listens to quiet music ___ relaxation.','She practises yoga ___ relaxation.'],
+exp_0443:['I know ___ sure that she was there.','We cannot tell ___ sure without checking.','Do you know ___ sure which answer is correct?'],
+exp_0444:['A small boat appears ___ the foreground of the painting.','The photographer placed flowers ___ the foreground.','You can see a child ___ the foreground of the picture.'],
+exp_0888:['You need permission ___ enter the laboratory.','She asked for permission ___ leave early.','They received permission ___ film inside the museum.'],
+exp_0913:['The law prohibits drivers ___ using phones.','Students are prohibited ___ entering this area.','The rules prohibit visitors ___ feeding the animals.'],
+exp_0945:['Who is responsible ___ organising the trip?','Parents are responsible ___ their children.','He is responsible ___ checking the equipment.'],
+exp_1062:['We must take responsibility ___ our decisions.','She took responsibility ___ the mistake.','He refused to take responsibility ___ the damage.']
+};
+let n=0;for(const x of data.expressions){const s=examples[x.id];if(!s)continue;if(s.length!==3||s.some(v=>(v.match(/___/g)||[]).length!==1))throw Error(x.id);if(x.id==='exp_0424'){x.expression='fly in';x.translation='прилетать (на самолёте)'}x.sentences=s;x.gapSentence=s[0];x.example=s[0].replace('___',x.answer);x.editorialStatus='reviewed';n++}if(n!==32)throw Error(n);fs.writeFileSync(path,JSON.stringify(data,null,2)+'\n');console.log('Reviewed',n);

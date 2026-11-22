@@ -9,6 +9,7 @@ import { buildCTTasks, isCorrectCTAnswer } from './ct-formats.js';
 import { ctTip } from './ct-tips.js';
 import { isTeacherPreview, isCourseCardLocked, isCheckpointLocked, shouldRecordTraining } from './teacher-preview.js';
 import { parseFlashcards, updateFlashcardProgress } from './flashcards.js';
+import { parseLearningEmbed } from './embed-utils.js';
 
 const firebaseConfig={apiKey:'AIzaSyBqxNT9EJLIFFazHKgDuBesC6CJt6Y8kZY',authDomain:'prepositions-ct.firebaseapp.com',projectId:'prepositions-ct',storageBucket:'prepositions-ct.firebasestorage.app',messagingSenderId:'185533456216',appId:'1:185533456216:web:b975529378af9dfc2a4f2d',measurementId:'G-MSQK3VZE9F'};
 const firebaseApp=initializeApp(firebaseConfig),auth=getAuth(firebaseApp),firestore=getFirestore(firebaseApp);
@@ -126,6 +127,8 @@ async function teacherDashboardV2(){
   $('#browseCourse').onclick=home;
   $('#manageExpressions').onclick=expressionManager;
   $('#manageFlashcards').onclick=teacherFlashcardSets;
+  $('#manageFlashcards').insertAdjacentHTML('afterend','<button class="btn secondary" id="manageEmbeds">Wordwall / Quizlet</button>');
+  $('#manageEmbeds').onclick=teacherEmbeddedActivities;
   document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=e=>{e.stopPropagation();removeStudentV2(b.dataset.delete)});
   document.querySelectorAll('[data-student]').forEach(b=>b.onclick=()=>studentDetailsV2(students.find(s=>s.uid===b.dataset.student)));
   loadTeacherMessagesV2();
@@ -149,12 +152,61 @@ async function removeStudentV2(uid){if(!confirm('Удалить профиль �
 async function expressionManager(){await loadCustomExpressions(currentUser.uid);const custom=db.expressions.filter(x=>x.custom).sort((a,b)=>a.cardId-b.cardId);$('#app').innerHTML=`<div class="view expression-manager"><button class="back" id="back">← В кабинет</button><div class="section-head"><div><div class="eyebrow">CUSTOM EXPRESSIONS</div><h2>Новые выражения</h2><p>Добавленные выражения появятся в словаре и тренировке выбранной карточки.</p></div></div><div class="expression-admin-grid"><section class="panel expression-form-panel"><h3>Добавить выражение</h3><form id="customExpressionForm" class="auth-form"><label>Выражение<input id="customExpression" required placeholder="Например: be interested in"></label><label>Перевод<input id="customTranslation" required placeholder="интересоваться чем-либо"></label><div class="form-row"><label>Предлог<input id="customAnswer" required placeholder="in"></label><label>Карточка<input id="customCard" type="number" min="1" max="35" required value="1"></label></div><label>Предложение 1<textarea id="customSentence1" required placeholder="She is interested ___ modern art."></textarea></label><label>Предложение 2 <small>необязательно</small><textarea id="customSentence2" placeholder="Many teenagers are interested ___ technology."></textarea></label><label>Предложение 3 <small>необязательно</small><textarea id="customSentence3" placeholder="I became interested ___ English at school."></textarea></label><p class="form-help">На месте предлога обязательно поставьте три нижних подчёркивания: <b>___</b></p><button class="btn" type="submit">Добавить выражение</button><p id="customExpressionError" class="auth-error"></p></form></section><section class="panel custom-list-panel"><h3>Добавленные выражения · ${custom.length}</h3><div class="custom-expression-list">${custom.map(x=>`<article><span>CARD ${x.cardId}</span><b>${esc(x.expression)}</b><small>${esc(x.translation)}</small><p>${esc(x.gapSentence)}</p><button class="small-btn" data-custom-delete="${x.firestoreId}">Удалить</button></article>`).join('')||'<p class="empty">Вы пока не добавили выражений.</p>'}</div></section></div></div>`;$('#back').onclick=teacherDashboardV2;$('#customExpressionForm').onsubmit=saveCustomExpression;document.querySelectorAll('[data-custom-delete]').forEach(b=>b.onclick=()=>deleteCustomExpression(b.dataset.customDelete))}
 async function saveCustomExpression(e){e.preventDefault();const expression=$('#customExpression').value.trim(),translation=$('#customTranslation').value.trim(),answer=$('#customAnswer').value.trim().toLowerCase(),cardId=Number($('#customCard').value),sentences=[$('#customSentence1').value.trim(),$('#customSentence2').value.trim(),$('#customSentence3').value.trim()].filter(Boolean),error=$('#customExpressionError');if(!sentences.every(s=>s.includes('___'))){error.textContent='В каждом предложении обозначьте пропущенный предлог символами ___.';return}if(!/^[a-z]+$/i.test(answer)){error.textContent='В поле «Предлог» напишите одно английское слово.';return}try{await addDoc(collection(firestore,'customExpressions'),{expression,translation,answer,acceptedAnswers:[answer],cardId,gapSentence:sentences[0],sentences,translationHint:translation,teacherId:currentUser.uid,createdAt:serverTimestamp()});toast('Выражение добавлено в карточку '+cardId);expressionManager()}catch{error.textContent='Не удалось сохранить. Опубликуйте обновлённые правила Firestore.'}}
 async function deleteCustomExpression(id){if(!confirm('Удалить это выражение из тренировок?'))return;try{await deleteDoc(doc(firestore,'customExpressions',id));toast('Выражение удалено');expressionManager()}catch{toast('Не удалось удалить выражение')}}
+async function teacherEmbeddedActivities(){
+  if(currentRole!=='teacher')return;
+  try{
+    const snap=await getDocs(query(collection(firestore,'externalActivities'),where('teacherId','==',currentUser.uid)));
+    const items=snap.docs.map(d=>({id:d.id,...d.data()}));
+    $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К ученикам</button><section class="flashcard-intro"><div class="eyebrow">INTERACTIVE LIBRARY · O! ENGLISH</div><h2>Игры и <i>тренажёры</i></h2><p>Добавляйте упражнения Wordwall и Quizlet, не выходя из стиля нашего сайта.</p><button class="btn" id="newEmbed">+ Добавить упражнение</button></section><div class="flashcard-set-grid">${items.map((s,i)=>`<article class="panel flashcard-set-tile"><span class="flashcard-set-index">${String(i+1).padStart(2,'0')}</span><span class="eyebrow">${esc(s.provider)}</span><h3>${esc(s.title)}</h3><p>Назначено ученикам: ${(s.assignedTo||[]).length}</p><div class="hero-actions"><button class="btn secondary" data-embed-edit="${s.id}">Изменить</button><button class="small-btn" data-embed-delete="${s.id}">Удалить</button></div></article>`).join('')||'<section class="panel flashcard-empty"><h3>Здесь появятся ваши игры ✦</h3><p>Скопируйте код встраивания из Wordwall или Quizlet и назначьте упражнение ученикам.</p></section>'}</div></div>`;
+    $('#back').onclick=teacherDashboardV2;$('#newEmbed').onclick=()=>editEmbeddedActivity();
+    document.querySelectorAll('[data-embed-edit]').forEach(b=>b.onclick=()=>editEmbeddedActivity(items.find(s=>s.id===b.dataset.embedEdit)));
+    document.querySelectorAll('[data-embed-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('Удалить это упражнение из назначений?'))return;try{await deleteDoc(doc(firestore,'externalActivities',b.dataset.embedDelete));teacherEmbeddedActivities()}catch{toast('Не удалось удалить упражнение')}});
+  }catch{toast('Не удалось загрузить упражнения. Опубликуйте новые правила Firestore.');teacherDashboardV2()}
+}
+async function editEmbeddedActivity(existing=null){
+  if(currentRole!=='teacher')return;
+  try{
+    const snap=await getDocs(query(collection(firestore,'students'),where('teacherId','==',currentUser.uid)));
+    const students=snap.docs.map(d=>({id:d.id,...d.data()}));
+    $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К играм</button><section class="panel flashcard-editor"><div class="eyebrow">WORDWALL · QUIZLET</div><h2>${existing?'Изменить упражнение':'Добавить упражнение'}</h2><form id="embedForm" class="auth-form"><label>Название<input id="embedTitle" maxlength="100" required placeholder="Например, Phrasal verbs · Match" value="${esc(existing?.title||'')}"></label><label>Код встраивания iframe или ссылка из него<textarea id="embedCode" rows="5" required placeholder="<iframe src=&quot;https://wordwall.net/embed/...&quot;></iframe>">${esc(existing?.embedUrl||'')}</textarea></label><p class="flashcard-hint">В Wordwall: «Встроить → Iframe». В Quizlet: откройте публичный набор → «Встроить» → «Copy HTML». Сайт сохранит только безопасную ссылку на упражнение, а не произвольный HTML.</p><fieldset class="flashcard-assign"><legend>Назначить ученикам</legend>${students.map(s=>`<label><input type="checkbox" name="embedStudent" value="${s.id}" ${(existing?.assignedTo||[]).includes(s.id)?'checked':''}><span>${esc(s.displayName)}</span></label>`).join('')||'<p>Сначала создайте ученика в кабинете.</p>'}</fieldset><p class="auth-error" id="embedError" role="alert"></p><button class="btn" type="submit">${existing?'Сохранить изменения':'Добавить упражнение'}</button></form></section></div>`;
+    $('#back').onclick=teacherEmbeddedActivities;
+    $('#embedForm').onsubmit=async e=>{
+      e.preventDefault();const error=$('#embedError');error.textContent='';
+      try{
+        const title=$('#embedTitle').value.trim();if(!title||title.length>100)throw Error('Введите название до 100 символов.');
+        const {provider,embedUrl}=parseLearningEmbed($('#embedCode').value);
+        const assignedTo=[...document.querySelectorAll('[name="embedStudent"]:checked')].map(el=>el.value);
+        const payload={title,provider,embedUrl,assignedTo,teacherId:currentUser.uid,updatedAt:serverTimestamp()};
+        if(existing)await updateDoc(doc(firestore,'externalActivities',existing.id),payload);
+        else await addDoc(collection(firestore,'externalActivities'),{...payload,createdAt:serverTimestamp()});
+        toast('Упражнение добавлено');teacherEmbeddedActivities();
+      }catch(err){error.textContent=err.message||'Не удалось сохранить упражнение.'}
+    };
+  }catch{toast('Не удалось открыть форму');teacherEmbeddedActivities()}
+}
+async function studentEmbeddedActivities(){
+  if(currentRole!=='student')return;
+  try{
+    const snap=await getDocs(query(collection(firestore,'externalActivities'),where('assignedTo','array-contains',currentUser.uid)));
+    const items=snap.docs.map(d=>({id:d.id,...d.data()})).filter(s=>s.teacherId===state.teacherId);
+    $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К карте курса</button><section class="flashcard-intro"><div class="eyebrow">PLAY & LEARN</div><h2>Играем и <i>учимся</i></h2><p>Wordwall и Quizlet от твоего преподавателя. Выбери упражнение и приступай!</p></section><div class="flashcard-set-grid">${items.map((s,i)=>`<button class="panel flashcard-set-tile flashcard-set-button" data-embed-open="${s.id}"><span class="flashcard-set-index">${String(i+1).padStart(2,'0')}</span><span class="eyebrow">${esc(s.provider)}</span><h3>${esc(s.title)}</h3><span class="flashcard-open-label">Начать ↗</span></button>`).join('')||'<section class="panel flashcard-empty"><h3>Пока нет новых игр</h3><p>Назначенные преподавателем упражнения появятся здесь.</p></section>'}</div></div>`;
+    $('#back').onclick=home;
+    document.querySelectorAll('[data-embed-open]').forEach(b=>b.onclick=()=>showEmbeddedActivity(items.find(s=>s.id===b.dataset.embedOpen)));
+  }catch{toast('Не удалось загрузить упражнения. Проверьте правила Firestore.');home()}
+}
+function showEmbeddedActivity(item){
+  if(currentRole!=='student'||!item)return;
+  let safe;
+  try{safe=parseLearningEmbed(item.embedUrl)}catch{toast('В этом упражнении некорректная ссылка. Сообщите преподавателю.');return}
+  $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К списку игр</button><section class="panel flashcard-study embed-study"><div class="eyebrow">${esc(safe.provider)} · ИНТЕРАКТИВНОЕ ЗАДАНИЕ</div><h2>${esc(item.title)}</h2><p class="flashcard-hint">Упражнение загружается со стороннего сервиса. Его результаты могут не отображаться в личном прогрессе сайта.</p><div class="embedded-frame"><iframe src="${esc(safe.embedUrl)}" title="${esc(item.title)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" allowfullscreen></iframe></div><p><a class="embed-outside" href="${esc(safe.embedUrl)}" target="_blank" rel="noopener noreferrer">Открыть упражнение в отдельной вкладке ↗</a></p></section></div>`;
+  $('#back').onclick=studentEmbeddedActivities;
+}
 async function teacherFlashcardSets(){
   if(currentRole!=='teacher')return;
   try{
     const snap=await getDocs(query(collection(firestore,'flashcardSets'),where('teacherId','==',currentUser.uid)));
     const sets=snap.docs.map(d=>({id:d.id,...d.data()}));
-    $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К ученикам</button><div class="section-head"><div><div class="eyebrow">FLASHCARD STUDIO</div><h2>Мои наборы</h2><p>Создавайте собственные карточки и назначайте их ученикам.</p></div><button class="btn" id="newFlashcardSet">+ Новый набор</button></div><div class="flashcard-set-grid">${sets.map(s=>`<article class="panel flashcard-set-tile"><span class="eyebrow">${(s.cards||[]).length} карточек</span><h3>${esc(s.title)}</h3><p>Назначено ученикам: ${(s.assignedTo||[]).length}</p><div class="hero-actions"><button class="btn secondary" data-flash-edit="${s.id}">Изменить</button><button class="small-btn" data-flash-delete="${s.id}">Удалить</button></div></article>`).join('')||'<section class="panel flashcard-empty"><h3>Создайте первый набор ✦</h3><p>Вставьте пары выражений и переводов из таблицы или подготовьте их вручную.</p></section>'}</div></div>`;
+    $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К ученикам</button><section class="flashcard-intro"><div class="eyebrow">FLASHCARD STUDIO · O! ENGLISH</div><h2>Мои <i>наборы</i></h2><p>Ваши авторские выражения. Красивый способ учить, повторять и запоминать.</p><button class="btn" id="newFlashcardSet">+ Новый набор</button></section><div class="flashcard-set-grid">${sets.map((s,i)=>`<article class="panel flashcard-set-tile"><span class="flashcard-set-index">${String(i+1).padStart(2,'0')}</span><span class="eyebrow">${(s.cards||[]).length} карточек</span><h3>${esc(s.title)}</h3><p>Назначено ученикам: ${(s.assignedTo||[]).length}</p><div class="hero-actions"><button class="btn secondary" data-flash-edit="${s.id}">Изменить</button><button class="small-btn" data-flash-delete="${s.id}">Удалить</button></div></article>`).join('')||'<section class="panel flashcard-empty"><h3>Создайте первый набор ✦</h3><p>Вставьте пары выражений и переводов из таблицы или подготовьте их вручную.</p></section>'}</div></div>`;
     $('#back').onclick=teacherDashboardV2;
     $('#newFlashcardSet').onclick=()=>editFlashcardSet();
     document.querySelectorAll('[data-flash-edit]').forEach(b=>b.onclick=()=>editFlashcardSet(sets.find(s=>s.id===b.dataset.flashEdit)));
@@ -169,6 +221,15 @@ async function editFlashcardSet(existing=null){
     const lines=(existing?.cards||[]).map(c=>`${c.front}\t${c.back}`).join('\n');
     $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К наборам</button><section class="panel flashcard-editor"><div class="eyebrow">FLASHCARD STUDIO</div><h2>${existing?'Редактировать набор':'Новый набор'}</h2><form id="flashcardSetForm" class="auth-form"><label>Название набора<input id="flashTitle" maxlength="100" required value="${esc(existing?.title||'')}" placeholder="Например, Phrasal verbs · Unit 1"></label><label>Выражение и перевод — через Tab, каждая пара с новой строки<textarea id="flashPairs" rows="12" required placeholder="look after\tзаботиться о\nbe interested in\tинтересоваться">${esc(lines)}</textarea></label><p class="flashcard-hint">Можно скопировать два столбца из Excel или Google Таблиц. До 200 карточек в наборе. При изменении порядка карточек отметки ученика могут потребовать повторения.</p><fieldset class="flashcard-assign"><legend>Назначить ученикам</legend>${students.map(s=>`<label><input type="checkbox" name="flashStudent" value="${s.id}" ${(existing?.assignedTo||[]).includes(s.id)?'checked':''}><span>${esc(s.displayName)}</span></label>`).join('')||'<p>Сначала создайте ученика в кабинете.</p>'}</fieldset><p class="auth-error" id="flashError" role="alert"></p><button class="btn" type="submit">${existing?'Сохранить изменения':'Создать набор'}</button></form></section></div>`;
     $('#back').onclick=teacherFlashcardSets;
+    const pairsInput=$('#flashPairs');
+    pairsInput.addEventListener('keydown',event=>{
+      if(event.key==='Tab'&&!event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey){
+        event.preventDefault();
+        pairsInput.setRangeText('\t',pairsInput.selectionStart,pairsInput.selectionEnd,'end');
+      }
+    });
+    pairsInput.insertAdjacentHTML('afterend','<div class="flashcard-input-tools"><button type="button" class="small-btn" id="insertFlashTab">⇥ Разделить выражение и перевод</button><small>Tab вставляет разделитель. Shift+Tab переходит к предыдущему полю.</small></div>');
+    $('#insertFlashTab').onclick=()=>{pairsInput.focus();pairsInput.setRangeText('\t',pairsInput.selectionStart,pairsInput.selectionEnd,'end')};
     $('#flashcardSetForm').onsubmit=async e=>{
       e.preventDefault();const error=$('#flashError');error.textContent='';
       try{
@@ -188,7 +249,7 @@ async function studentFlashcardSets(){
   try{
     const snap=await getDocs(query(collection(firestore,'flashcardSets'),where('assignedTo','array-contains',currentUser.uid)));
     const sets=snap.docs.map(d=>({id:d.id,...d.data()})).filter(s=>s.teacherId===state.teacherId);
-    $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К карте курса</button><div class="section-head"><div><div class="eyebrow">MY FLASHCARDS</div><h2>Карточки от преподавателя</h2><p>Переворачивай карточки, запоминай выражения и возвращайся к трудным.</p></div></div><div class="flashcard-set-grid">${sets.map(s=>`<button class="panel flashcard-set-tile flashcard-set-button" data-flash-open="${s.id}"><span class="eyebrow">${(s.cards||[]).length} карточек</span><h3>${esc(s.title)}</h3><p>В трудных: ${((state.flashcardProgress||{})[s.id]?.difficult||[]).length}</p><span>Открыть →</span></button>`).join('')||'<section class="panel flashcard-empty"><h3>Пока нет назначенных наборов</h3><p>Когда преподаватель назначит карточки, они появятся здесь.</p></section>'}</div></div>`;
+    $('#app').innerHTML=`<div class="view flashcard-page"><button class="back" id="back">← К карте курса</button><section class="flashcard-intro"><div class="eyebrow">MY FLASHCARDS · PREPOSITION QUEST CT</div><h2>Учить. <i>Помнить.</i><br>Повторять.</h2><p>Переворачивай карточки, запоминай выражения и возвращайся к трудным.</p></section><div class="flashcard-set-grid">${sets.map((s,i)=>`<button class="panel flashcard-set-tile flashcard-set-button" data-flash-open="${s.id}"><span class="flashcard-set-index">${String(i+1).padStart(2,'0')}</span><span class="eyebrow">${(s.cards||[]).length} карточек</span><h3>${esc(s.title)}</h3><p>В трудных: ${((state.flashcardProgress||{})[s.id]?.difficult||[]).length}</p><span class="flashcard-open-label">Открыть набор ↗</span></button>`).join('')||'<section class="panel flashcard-empty"><h3>Пока нет назначенных наборов</h3><p>Когда преподаватель назначит карточки, они появятся здесь.</p></section>'}</div></div>`;
     $('#back').onclick=home;
     document.querySelectorAll('[data-flash-open]').forEach(b=>b.onclick=()=>studyFlashcardSet(sets.find(s=>s.id===b.dataset.flashOpen)));
   }catch{toast('Не удалось загрузить наборы. Проверьте правила Firestore.');home()}
@@ -207,7 +268,7 @@ function studyFlashcardSet(set){
     $('#flashReverse').onclick=()=>{reversed=!reversed;flipped=false;render()};
     $('#flashOnlyDifficult').onclick=()=>{onlyDifficult=!onlyDifficult;index=0;flipped=false;render()};
     if(!item)return;
-    $('#flipCard').onclick=()=>{flipped=!flipped;render()};
+    $('#flipCard').onclick=()=>{flipped=!flipped;$('#flipCard .flip-card').classList.toggle('flipped',flipped);$('#flipCard').setAttribute('aria-pressed',String(flipped))};
     const mark=async kind=>{state.flashcardProgress=updateFlashcardProgress(state.flashcardProgress,set.id,item.id,kind);try{await save()}catch{toast('Не удалось сохранить отметку. Проверьте подключение.')}index=onlyDifficult?index:((index+1)%cards.length);flipped=false;render()};
     $('#flashDifficult').onclick=()=>mark('difficult');
     $('#flashKnown').onclick=()=>mark('known');
@@ -219,7 +280,7 @@ function studyFlashcardSet(set){
 async function routeUser(u){currentUser=u;if(!u){currentRole=null;currentProfile=null;authScreen();return}try{const[role,data]=await detectRole(u);currentRole=role;currentProfile=data;if(role==='teacher'){state={...EMPTY,completed:{},errors:[],name:data.displayName||'Преподаватель'};await loadCustomExpressions(u.uid);teacherDashboardV2();return}if(role==='student'){await loadCustomExpressions(data.teacherId||null);loginMotivation=loginMotivations[Math.floor(Math.random()*loginMotivations.length)];state={...EMPTY,...data,...recoverMistakes(data),name:data.displayName};const avatar=avatarFor(state.name);setTop(state.name,state.name.slice(0,2).toUpperCase(),avatar);home();return}await signOut(auth);authScreen();$('#authError').textContent='Профиль не найден в базе.'}catch{authScreen();$('#authError').textContent='Не удалось загрузить профиль. Проверьте правила Firestore.'}}
 async function init(){try{db=await fetch('data/expressions.json').then(r=>r.json());onAuthStateChanged(auth,routeUser)}catch{$('#app').innerHTML='<section class="panel" style="padding:30px"><h1>Не удалось загрузить сайт</h1><p>Откройте его через GitHub Pages.</p></section>'}}
 const showCourseMap=home;
-home=function(){showCourseMap();if(currentRole==='student'){$('.journey-copy .hero-actions')?.insertAdjacentHTML('beforeend','<button class="btn secondary" id="assignedFlashcards">Карточки от преподавателя</button>');if($('#assignedFlashcards'))$('#assignedFlashcards').onclick=studentFlashcardSets}};
+home=function(){showCourseMap();if(currentRole==='student'){$('.journey-copy .hero-actions')?.insertAdjacentHTML('beforeend','<button class="btn secondary" id="assignedFlashcards">Карточки от преподавателя</button><button class="btn secondary" id="assignedEmbeds">Wordwall / Quizlet</button>');if($('#assignedFlashcards'))$('#assignedFlashcards').onclick=studentFlashcardSets;if($('#assignedEmbeds'))$('#assignedEmbeds').onclick=studentEmbeddedActivities}};
 $('#profileBtn').addEventListener('click',()=>currentUser?toast(currentRole==='teacher'?'Кабинет преподавателя':state.name):toast('Сначала войдите'));$('#logoutBtn').addEventListener('click',async()=>{try{await logout()}catch{toast('Не удалось выйти. Обновите страницу и попробуйте снова.')}});$('#feedbackBtn').addEventListener('click',()=>{if(currentRole==='student')feedbackDialog();else toast('Связь доступна после входа ученика')});$('#infoBtn').addEventListener('click',glossary);document.addEventListener('click',e=>{if(e.target.closest('#attempts'))checkpointHistory()});init();
 document.addEventListener('click',e=>{if(e.target.closest('#mistakes')){e.stopPropagation();showMistakeBank()}},true);
 document.addEventListener('click',e=>{if(e.target.closest('#ctFormats'))showCTFormats()});

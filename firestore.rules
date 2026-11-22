@@ -131,5 +131,32 @@ service cloud.firestore {
       allow delete: if isTeacher()
                     && resource.data.teacherId == request.auth.uid;
     }
+
+    // Ссылки на встроенные задания Wordwall / Quizlet.
+    match /externalActivities/{activityId} {
+      allow read: if (isTeacher() && resource.data.teacherId == request.auth.uid)
+                  || (isStudentOf(resource.data.teacherId)
+                      && request.auth.uid in resource.data.assignedTo);
+
+      allow create: if isTeacher()
+                    && request.resource.data.teacherId == request.auth.uid
+                    && request.resource.data.title is string
+                    && request.resource.data.title.size() <= 100
+                    && request.resource.data.provider in ['Wordwall', 'Quizlet']
+                    && request.resource.data.embedUrl is string
+                    && request.resource.data.embedUrl.size() <= 500
+                    && request.resource.data.assignedTo is list;
+
+      allow update: if isTeacher()
+                    && resource.data.teacherId == request.auth.uid
+                    && request.resource.data.teacherId == resource.data.teacherId
+                    && request.resource.data.provider in ['Wordwall', 'Quizlet']
+                    && request.resource.data.embedUrl is string
+                    && request.resource.data.embedUrl.size() <= 500
+                    && request.resource.data.assignedTo is list;
+
+      allow delete: if isTeacher()
+                    && resource.data.teacherId == request.auth.uid;
+    }
   }
 }

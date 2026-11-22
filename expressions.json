@@ -15574,7 +15574,8 @@
       "translation": "просматривать",
       "answer": "through",
       "acceptedAnswers": [
-        "through"
+        "through",
+        "over"
       ],
       "example": "Please look through the report before the meeting.",
       "gapSentence": "Please look ___ the report before the meeting.",

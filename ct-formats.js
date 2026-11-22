@@ -1,4 +1,5 @@
 import {uniquePracticeItems} from './practice-utils.js';
+import {extraDual,extraTransform} from './ct-extra.js';
 
 // Author-written practice analogues, with one B19 reference example from the user-supplied variant.
 export const dualContextTasks=[
@@ -21,7 +22,8 @@ export const dualContextTasks=[
 ['We must ___ in touch.','Please ___ quiet during the test.','keep'],
 ['The child ___ asleep quickly.','They ___ out with each other last week.','fell'],
 ['She will ___ into the room quietly.','I may ___ across an interesting book.','come'],
-['He ___ up the old photograph.','The wind ___ down several trees.','blew']
+['He ___ up the old photograph.','The wind ___ down several trees.','blew'],
+...extraDual
 ].map(([first,second,answer],i)=>({id:`ct_dual_${i+1}`,type:'b7-b8',first,second,answer,acceptedAnswers:[answer]}));
 
 export const transformationTasks=[
@@ -44,7 +46,8 @@ export const transformationTasks=[
 ['The report helped us understand the problem.','The report ___ the problem.','LIGHT','shed light on'],
 ['He stopped smoking.','He ___ smoking.','UP','gave up'],
 ['This dress is no longer fashionable.','This dress ___ fashion.','OUT','is out of'],
-['She resembles her mother.','She ___ her mother.','AFTER','takes after']
+['She resembles her mother.','She ___ her mother.','AFTER','takes after'],
+...extraTransform
 ].map(([original,template,keyword,answer],i)=>({id:`ct_transform_${i+1}`,type:'b19',original,template,keyword,answer,acceptedAnswers:[answer,...({0:["aren't allowed"],6:['gets along well with'],8:["can't put up with"]}[i]||[])]}));
 
 export function buildCTTasks(format,expressions,random=Math.random){
@@ -53,7 +56,7 @@ export function buildCTTasks(format,expressions,random=Math.random){
     return uniquePracticeItems(eligible,20,random).map(x=>({id:`ct_prep_${x.id}`,type:'b1-b3',expressionId:x.id,template:x.gapSentence,answer:x.answer,acceptedAnswers:x.acceptedAnswers||[x.answer]}));
   }
   const bank=format==='b7-b8'?dualContextTasks:format==='b19'?transformationTasks:[];
-  return [...bank].map(item=>({item,order:random()})).sort((a,b)=>a.order-b.order).map(({item})=>({...item}));
+  return [...bank].map(item=>({item,order:random()})).sort((a,b)=>a.order-b.order).slice(0,20).map(({item})=>({...item}));
 }
 
 export function isCorrectCTAnswer(item,given){

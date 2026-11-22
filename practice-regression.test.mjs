@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { expressionKey, translationOptions, uniquePracticeItems } from '../practice-utils.js';
+import { expressionKey, translationOptions, uniquePracticeItems, isAcceptedExpressionAnswer } from '../practice-utils.js';
 
 const data = JSON.parse(fs.readFileSync(new URL('../data/expressions.json', import.meta.url), 'utf8'));
 
@@ -55,4 +55,15 @@ test('every translation is in Russian, and split items are valid', () => {
       assert.equal((sentence.match(/___/g) || []).length, 1, item.id);
     }
   }
+});
+
+test('ambiguous look through / look over contexts accept both natural options', () => {
+  const look = data.expressions.find(item => item.id === 'exp_0772');
+  assert.deepEqual(look.acceptedAnswers, ['through', 'over']);
+  assert.ok(isAcceptedExpressionAnswer(look, 'through'));
+  assert.ok(isAcceptedExpressionAnswer(look, 'Over'));
+  assert.equal(isAcceptedExpressionAnswer(look, 'at'), false);
+  const agree = data.expressions.find(item => item.id === 'exp_0029');
+  assert.equal(isAcceptedExpressionAnswer(agree, 'on'), false);
+  assert.ok(isAcceptedExpressionAnswer(agree, 'with'));
 });

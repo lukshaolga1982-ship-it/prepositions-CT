@@ -71,3 +71,9 @@ export function translationOptions(item, pool, random = Math.random) {
   return [correct, ...options].map(value => ({ value, n: random() }))
     .sort((a, b) => a.n - b.n).map(entry => entry.value);
 }
+
+export function isAcceptedExpressionAnswer(item, given) {
+  const normalized = value => String(value ?? '').trim().toLowerCase();
+  return (item.acceptedAnswers?.length ? item.acceptedAnswers : [item.answer])
+    .some(answer => normalized(answer) === normalized(given));
+}

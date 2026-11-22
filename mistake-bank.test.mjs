@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {preserveExpressionMistake,preserveCTMistake,mergeCheckpointMistakes,recoverMistakes} from '../mistake-utils.js';
 import {applyPracticeCompletion,evaluateCheckpoint} from '../progress-utils.js';
+import {isTeacherPreview,isCourseCardLocked,isCheckpointLocked,shouldRecordTraining} from '../teacher-preview.js';
 
 test('errors form a permanent set and can be repeated indefinitely',()=>{
   const state={errors:[]};
@@ -48,4 +49,14 @@ test('Checkpoint and mistake reviews never award stars or unlock cards',()=>{
   assert.equal(applyPracticeCompletion(state,{cardId:6},90),true);
   assert.equal(state.completed[6],90);
   assert.equal(state.unlocked,7);
+});
+
+test('teacher can browse every card and checkpoint without a student account',()=>{
+ assert.ok(isTeacherPreview('teacher'));
+ for(let card=1;card<=35;card++)assert.equal(isCourseCardLocked('teacher',card,1),false);
+ for(let module=1;module<=7;module++)assert.equal(isCheckpointLocked('teacher',module,{}),false);
+ assert.equal(isCourseCardLocked('student',35,1),true);
+ assert.equal(isCheckpointLocked('student',7,{}),true);
+ assert.equal(shouldRecordTraining('teacher'),false);
+ assert.equal(shouldRecordTraining('student'),true);
 });
